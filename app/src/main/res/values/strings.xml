@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">DeathCode</string>
+    <string name="keyboard_name">Death Code Keyboard</string>
+    <string name="keyboard_subtype_label">English (programming)</string>
 </resources>

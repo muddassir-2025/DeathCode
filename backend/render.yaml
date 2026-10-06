@@ -1,0 +1,40 @@
+# Render blueprint for the Death Code API.
+#
+# Deploy: push this repository to GitHub, then in Render choose
+# "New +" -> "Blueprint" and point it at the repo. Render reads this file.
+services:
+  - type: web
+    name: deathcode-api
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "20.11.1"
+
+      # Neon connection string — paste it in the Render dashboard.
+      - key: DB_URL
+        sync: false
+
+      # Render generates a strong secret on first deploy.
+      - key: JWT_SECRET
+        generateValue: true
+
+      # Bootstrap administrator (leave unset to disable).
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: RATE_LIMIT_SUBMISSIONS_PER_HOUR
+        value: "5"
+      - key: RATE_LIMIT_SUBMISSIONS_PER_DAY
+        value: "20"
+      - key: RATE_LIMIT_MAX_PENDING
+        value: "10"

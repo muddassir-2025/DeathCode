@@ -1,58 +1,125 @@
 package com.muddassir.deathcode.ui.theme
 
-import android.app.Activity
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.Color
+import com.muddassir.deathcode.data.repository.ThemeMode
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
+/**
+ * Colours for syntax highlighting. Exposed through a composition local so the highlighter
+ * adapts to the active theme instead of hard-coding a dark palette.
+ */
+data class CodeColors(
+    val background: Color,
+    val keyword: Color,
+    val type: Color,
+    val string: Color,
+    val comment: Color,
+    val number: Color,
+    val function: Color,
+    val annotation: Color,
+    val plain: Color,
 )
 
-private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
+val LocalCodeColors = staticCompositionLocalOf {
+    CodeColors(
+        background = CodeBackground,
+        keyword = CodeKeyword,
+        type = CodeType,
+        string = CodeString,
+        comment = CodeComment,
+        number = CodeNumber,
+        function = CodeFunction,
+        annotation = CodeAnnotation,
+        plain = CodePlain,
+    )
+}
 
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
+private val DarkScheme = darkColorScheme(
+    primary = TerminalGreen,
+    onPrimary = Color(0xFF08210F),
+    secondary = TerminalCyan,
+    onSecondary = Color(0xFF04222A),
+    tertiary = TerminalAmber,
+    background = Ink,
+    onBackground = InkText,
+    surface = InkElevated,
+    onSurface = InkText,
+    surfaceVariant = InkCard,
+    onSurfaceVariant = InkMuted,
+    outline = InkOutline,
+    outlineVariant = InkOutline,
+    error = Color(0xFFE06C75),
+)
+
+private val LightScheme = lightColorScheme(
+    primary = LightPrimary,
     onPrimary = Color.White,
+    secondary = LightSecondary,
     onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
+    tertiary = Color(0xFFB7791F),
+    background = LightSurface,
+    onBackground = LightText,
+    surface = Color.White,
+    onSurface = LightText,
+    surfaceVariant = LightSurfaceVariant,
+    onSurfaceVariant = LightMuted,
+    outline = LightOutline,
+    outlineVariant = LightOutline,
+    error = Color(0xFFC0392B),
 )
 
+private val DarkCodeColors = CodeColors(
+    background = CodeBackground,
+    keyword = CodeKeyword,
+    type = CodeType,
+    string = CodeString,
+    comment = CodeComment,
+    number = CodeNumber,
+    function = CodeFunction,
+    annotation = CodeAnnotation,
+    plain = CodePlain,
+)
+
+private val LightCodeColors = CodeColors(
+    background = Color(0xFFF3F5F7),
+    keyword = Color(0xFF8E44AD),
+    type = Color(0xFF1F6F8B),
+    string = Color(0xFF2E7D5B),
+    comment = Color(0xFF7A8794),
+    number = Color(0xFFB7791F),
+    function = Color(0xFF1F6FB2),
+    annotation = Color(0xFFC0392B),
+    plain = Color(0xFF2C3542),
+)
+
+/**
+ * Death Code theme. Defaults to the dark, developer-tool look while still honouring the
+ * user's explicit choice from Settings.
+ */
 @Composable
 fun DeathCodeTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
-    content: @Composable () -> Unit
+    themeMode: ThemeMode = ThemeMode.DARK,
+    content: @Composable () -> Unit,
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+    val darkTheme = when (themeMode) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.DARK -> true
+        ThemeMode.LIGHT -> false
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
-    )
+    CompositionLocalProvider(
+        LocalCodeColors provides if (darkTheme) DarkCodeColors else LightCodeColors,
+    ) {
+        MaterialTheme(
+            colorScheme = if (darkTheme) DarkScheme else LightScheme,
+            typography = DeathCodeTypography,
+            content = content,
+        )
+    }
 }

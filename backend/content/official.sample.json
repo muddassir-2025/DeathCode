@@ -1,0 +1,51 @@
+{
+  "packageVersion": 2,
+  "kind": "OFFICIAL",
+  "fullSnapshot": false,
+  "nodes": [
+    {
+      "id": "cpp-builtins-algorithms-equal-range",
+      "parentId": "cpp-builtins-algorithms",
+      "title": "equal_range()",
+      "slug": "equal-range",
+      "markdown": "Returns the pair of iterators `[lower_bound, upper_bound)` for a value in a sorted range.\n\nUseful for counting occurrences in `O(log n)`.",
+      "syntax": "auto [lo, hi] = equal_range(v.begin(), v.end(), x);\nint occurrences = hi - lo;",
+      "notes": "The range must already be sorted.",
+      "language": "cpp",
+      "keywords": ["equalrange", "binarysearch"],
+      "sortOrder": 4
+    },
+    {
+      "id": "cpp-builtins-algorithms-accumulate",
+      "parentId": "cpp-builtins-algorithms",
+      "title": "accumulate()",
+      "slug": "accumulate",
+      "markdown": "Folds a range into a single value. Lives in `<numeric>`.",
+      "syntax": "long long sum = accumulate(v.begin(), v.end(), 0LL);",
+      "notes": "Pass `0LL` (not `0`) when the sum may exceed the range of `int`.",
+      "language": "cpp",
+      "keywords": ["accumulate", "sum"],
+      "sortOrder": 5
+    },
+    {
+      "id": "algorithms-complexity",
+      "parentId": null,
+      "title": "Complexity Cheat Sheet",
+      "slug": "complexity-cheat-sheet",
+      "markdown": "A quick reference for the cost of the operations you reach for most often.",
+      "language": "text",
+      "keywords": ["complexity", "bigo"],
+      "sortOrder": 6
+    },
+    {
+      "id": "algorithms-complexity-hashmap",
+      "parentId": "algorithms-complexity",
+      "title": "Hash Map",
+      "slug": "hash-map",
+      "markdown": "Average case `O(1)` lookup, insert and erase; `O(n)` worst case.",
+      "language": "text",
+      "keywords": ["hashmap", "unordered_map"],
+      "sortOrder": 0
+    }
+  ]
+}
