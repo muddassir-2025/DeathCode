@@ -1,5 +1,7 @@
 package com.muddassir.deathcode.keyboard.ui
 
+import android.view.HapticFeedbackConstants
+import android.view.SoundEffectConstants
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
@@ -8,18 +10,24 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -38,7 +47,21 @@ import com.muddassir.deathcode.keyboard.KeyboardController
 import com.muddassir.deathcode.keyboard.KeyboardState
 import com.muddassir.deathcode.keyboard.ShiftState
 import com.muddassir.deathcode.syntax.Languages
+import com.muddassir.deathcode.ui.theme.LocalKeyboardColors
 import kotlinx.coroutines.delay
+
+/** Whether the current key press should buzz and/or click. */
+private data class KeyFeedback(val haptics: Boolean, val sound: Boolean)
+
+private val LocalKeyFeedback = compositionLocalOf { KeyFeedback(haptics = true, sound = false) }
+
+/**
+ * How prominent a key is. Character keys carry the most weight, functional keys
+ * (shift, backspace, `?123`, language) are quieter, and the enter key is the single accent.
+ */
+private enum class KeyTone { CHARACTER, FUNCTION, ACCENT }
+
+private val KeyCorner = RoundedCornerShape(8.dp)
 
 /**
  * The Death Code Keyboard surface.
@@ -52,39 +75,47 @@ fun DeathCodeKeyboard(
     state: KeyboardState,
     onOpenSettings: () -> Unit,
 ) {
+    val colors = LocalKeyboardColors.current
     val keyHeight = state.keyHeightDp.dp
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface),
-    ) {
-        if (state.showSuggestions) {
-            SuggestionRow(
-                suggestions = state.suggestions,
-                onSuggestion = controller::applySuggestion,
-                onOpenSettings = onOpenSettings,
+    CompositionLocalProvider(LocalKeyFeedback provides KeyFeedback(state.haptics, state.sound)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(colors.base)
+                // An input method window is drawn edge to edge, *underneath* the navigation bar,
+                // so the system's Back/Home/Recents buttons would otherwise sit on top of the
+                // bottom row. Pad the surface by the navigation-bar inset so every key stays
+                // reachable (and the strip behind the buttons still matches the keyboard).
+                .windowInsetsPadding(WindowInsets.navigationBars),
+        ) {
+            if (state.showSuggestions) {
+                SuggestionRow(
+                    suggestions = state.suggestions,
+                    onSuggestion = controller::applySuggestion,
+                    onOpenSettings = onOpenSettings,
+                )
+            }
+
+            if (state.showSymbolRow && !state.symbolsPage) {
+                SymbolRow(onSymbol = controller::onSymbol)
+            }
+
+            if (state.symbolsPage) {
+                SymbolPage(controller = controller, keyHeight = keyHeight)
+            } else {
+                LetterPage(controller = controller, state = state, keyHeight = keyHeight)
+            }
+
+            BottomRow(
+                controller = controller,
+                state = state,
+                keyHeight = keyHeight,
             )
+
+            // Breathing room above the system gesture bar.
+            Spacer(modifier = Modifier.height(6.dp))
         }
-
-        if (state.showSymbolRow && !state.symbolsPage) {
-            SymbolRow(onSymbol = controller::onSymbol)
-        }
-
-        if (state.symbolsPage) {
-            SymbolPage(controller = controller, keyHeight = keyHeight)
-        } else {
-            LetterPage(controller = controller, state = state, keyHeight = keyHeight)
-        }
-
-        BottomRow(
-            controller = controller,
-            state = state,
-            keyHeight = keyHeight,
-        )
-
-        // Breathing room above the system gesture bar.
-        Spacer(modifier = Modifier.height(6.dp))
     }
 }
 
@@ -94,11 +125,13 @@ private fun SuggestionRow(
     onSuggestion: (KeyboardSuggestion) -> Unit,
     onOpenSettings: () -> Unit,
 ) {
+    val colors = LocalKeyboardColors.current
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(48.dp)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .background(colors.suggestionBar)
             .horizontalScroll(rememberScrollState())
             .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -110,7 +143,7 @@ private fun SuggestionRow(
             Text(
                 text = "Type a keyword (e.g. for, bfs, triangle)",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = colors.mutedText,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -124,17 +157,19 @@ private fun SuggestionRow(
 
 @Composable
 private fun SuggestionChip(suggestion: KeyboardSuggestion, onClick: () -> Unit) {
+    val colors = LocalKeyboardColors.current
+
     Column(
         modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surface)
+            .clip(KeyCorner)
+            .background(colors.key)
             .pressable(onClick)
             .padding(horizontal = 10.dp, vertical = 4.dp),
     ) {
         Text(
             text = suggestion.title,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.primary,
+            color = colors.accent,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -144,7 +179,7 @@ private fun SuggestionChip(suggestion: KeyboardSuggestion, onClick: () -> Unit) 
                 fontFamily = FontFamily.Monospace,
                 fontSize = 10.sp,
             ),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = colors.mutedText,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -170,6 +205,7 @@ private fun SymbolRow(onSymbol: (String) -> Unit) {
 @Composable
 private fun SymbolKeyButton(key: SymbolKey, onSymbol: (String) -> Unit) {
     var menuOpen by remember { mutableStateOf(false) }
+
     Box {
         KeySurface(
             modifier = Modifier
@@ -182,7 +218,6 @@ private fun SymbolKeyButton(key: SymbolKey, onSymbol: (String) -> Unit) {
             Text(
                 text = key.primary,
                 style = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
-                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
             )
         }
@@ -204,6 +239,7 @@ private fun LetterPage(
     keyHeight: androidx.compose.ui.unit.Dp,
 ) {
     val uppercase = state.shift != ShiftState.OFF
+    val shiftActive = state.shift != ShiftState.OFF
 
     Column(
         modifier = Modifier
@@ -222,12 +258,12 @@ private fun LetterPage(
                             .width(52.dp)
                             .height(keyHeight)
                             .padding(2.dp),
+                        tone = if (shiftActive) KeyTone.ACCENT else KeyTone.FUNCTION,
                         onClick = controller::onShift,
                     ) {
                         Text(
                             text = if (state.shift == ShiftState.CAPS) "⇪" else "⇧",
                             style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
                         )
                     }
                 }
@@ -242,7 +278,6 @@ private fun LetterPage(
                         Text(
                             text = (if (uppercase) letter.uppercaseChar() else letter).toString(),
                             style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
                         )
                     }
                 }
@@ -252,14 +287,11 @@ private fun LetterPage(
                             .width(52.dp)
                             .height(keyHeight)
                             .padding(2.dp),
+                        tone = KeyTone.FUNCTION,
                         onClick = controller::onBackspace,
                         repeat = true,
                     ) {
-                        Text(
-                            text = "⌫",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
+                        Text("⌫", style = MaterialTheme.typography.bodyLarge)
                     }
                 }
             }
@@ -288,6 +320,7 @@ private fun SymbolPage(controller: KeyboardController, keyHeight: androidx.compo
                         modifier = Modifier
                             .width(52.dp)
                             .height(keyHeight),
+                        tone = KeyTone.FUNCTION,
                         onClick = controller::onBackspace,
                         repeat = true,
                     ) {
@@ -313,7 +346,6 @@ private fun SymbolPage(controller: KeyboardController, keyHeight: androidx.compo
                                 style = MaterialTheme.typography.bodyLarge.copy(
                                     fontFamily = FontFamily.Monospace,
                                 ),
-                                color = MaterialTheme.colorScheme.onSurface,
                             )
                         }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -340,6 +372,8 @@ private fun BottomRow(
     state: KeyboardState,
     keyHeight: androidx.compose.ui.unit.Dp,
 ) {
+    val colors = LocalKeyboardColors.current
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -351,12 +385,12 @@ private fun BottomRow(
             modifier = Modifier
                 .width(58.dp)
                 .height(keyHeight),
+            tone = if (state.symbolsPage) KeyTone.ACCENT else KeyTone.FUNCTION,
             onClick = controller::onToggleSymbolsPage,
         ) {
             Text(
                 text = if (state.symbolsPage) "ABC" else "?123",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface,
             )
         }
 
@@ -364,12 +398,13 @@ private fun BottomRow(
             modifier = Modifier
                 .width(58.dp)
                 .height(keyHeight),
+            tone = KeyTone.FUNCTION,
             onClick = controller::onLanguageCycle,
         ) {
             Text(
                 text = languageBadge(state.language),
                 style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
-                color = MaterialTheme.colorScheme.primary,
+                color = colors.accent,
                 fontWeight = FontWeight.Medium,
             )
         }
@@ -378,13 +413,10 @@ private fun BottomRow(
             modifier = Modifier
                 .weight(1f)
                 .height(keyHeight),
+            tone = KeyTone.ACCENT,
             onClick = controller::onEnter,
         ) {
-            Text(
-                text = "⏎",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
+            Text("⏎", style = MaterialTheme.typography.bodyLarge)
         }
 
         KeySurface(
@@ -402,7 +434,11 @@ private fun BottomRow(
                 .height(keyHeight),
             onClick = { controller.onSymbol(".") },
         ) {
-            Text(".", style = MaterialTheme.typography.bodyLarge, fontFamily = FontFamily.Monospace)
+            Text(
+                ".",
+                style = MaterialTheme.typography.bodyLarge,
+                fontFamily = FontFamily.Monospace,
+            )
         }
 
         KeySurface(
@@ -411,26 +447,39 @@ private fun BottomRow(
                 .height(keyHeight),
             onClick = { controller.onSymbol(",") },
         ) {
-            Text(",", style = MaterialTheme.typography.bodyLarge, fontFamily = FontFamily.Monospace)
+            Text(
+                ",",
+                style = MaterialTheme.typography.bodyLarge,
+                fontFamily = FontFamily.Monospace,
+            )
         }
     }
 }
 
 private fun languageBadge(language: String): String =
     Languages.byId(language)?.displayName
-        ?.replace("C++", "C++")
         ?.take(6)
         ?: language.uppercase()
 
-/** A keyboard key with immediate press feedback, optional long press and repeat. */
+/**
+ * A keyboard key with immediate press feedback, optional long press and repeat.
+ *
+ * The label colour comes from [LocalContentColor], set here from the key's [tone], so callers
+ * only supply the label text.
+ */
 @Composable
 private fun KeySurface(
     modifier: Modifier = Modifier,
+    tone: KeyTone = KeyTone.CHARACTER,
     onClick: () -> Unit,
     onLongPress: (() -> Unit)? = null,
     repeat: Boolean = false,
     content: @Composable () -> Unit,
 ) {
+    val colors = LocalKeyboardColors.current
+    val feedback = LocalKeyFeedback.current
+    val view = LocalView.current
+
     var pressed by remember { mutableStateOf(false) }
 
     LaunchedEffect(pressed) {
@@ -443,53 +492,83 @@ private fun KeySurface(
         }
     }
 
+    val fill = when {
+        pressed -> colors.pressed
+        tone == KeyTone.ACCENT -> colors.accent
+        tone == KeyTone.FUNCTION -> colors.functionKey
+        else -> colors.key
+    }
+
+    val labelColor = when {
+        pressed -> colors.keyText
+        tone == KeyTone.ACCENT -> colors.onAccent
+        tone == KeyTone.FUNCTION -> colors.mutedText
+        else -> colors.keyText
+    }
+
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(
-                if (pressed) {
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
-                } else {
-                    MaterialTheme.colorScheme.surfaceVariant
-                },
-            )
+            .clip(KeyCorner)
+            .background(fill)
             .pointerInput(repeat, onLongPress) {
                 detectTapGestures(
                     onPress = {
                         pressed = true
-                        if (!repeat) onClick()
+                        // Buzz/click on press so the key feels physical.
+                        if (feedback.haptics) view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                        if (feedback.sound) view.playSoundEffect(SoundEffectConstants.CLICK)
+                        // Fire immediately for every key. Autorepeat (when enabled) continues from
+                        // `LaunchedEffect` above after the initial delay — previously repeat keys
+                        // skipped this call, so a quick tap on backspace did nothing at all.
+                        onClick()
                         tryAwaitRelease()
                         pressed = false
                     },
-                    onLongPress = onLongPress?.let { callback -> { callback() } },
+                    onLongPress = onLongPress?.let { callback ->
+                        {
+                            if (feedback.haptics) {
+                                view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                            }
+                            callback()
+                        }
+                    },
                 )
             },
         contentAlignment = Alignment.Center,
     ) {
-        content()
+        CompositionLocalProvider(LocalContentColor provides labelColor) {
+            content()
+        }
     }
 }
 
 @Composable
 private fun KeyChip(label: String, onClick: () -> Unit, wide: Boolean) {
+    val colors = LocalKeyboardColors.current
+
     Box(
         modifier = Modifier
             .width(if (wide) 120.dp else 40.dp)
             .height(36.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surface)
+            .clip(KeyCorner)
+            .background(colors.key)
             .pressable(onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = colors.keyText)
     }
 }
 
 @Composable
-private fun Modifier.pressable(onClick: () -> Unit): Modifier =
-    this.pointerInput(onClick) {
+private fun Modifier.pressable(onClick: () -> Unit): Modifier {
+    val feedback = LocalKeyFeedback.current
+    val view = LocalView.current
+    return this.pointerInput(onClick, feedback) {
         detectTapGestures(onPress = {
+            if (feedback.haptics) view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            if (feedback.sound) view.playSoundEffect(SoundEffectConstants.CLICK)
             onClick()
             tryAwaitRelease()
         })
     }
+}

@@ -40,6 +40,51 @@ val LocalCodeColors = staticCompositionLocalOf {
     )
 }
 
+/**
+ * Colours for the keyboard surface.
+ *
+ * The keyboard keeps its own palette instead of reusing the Material surface colours: it
+ * needs a strong, glanceable separation between the base, the character keys, the
+ * functional keys and the accent key, which the shared surfaces are too low-contrast for.
+ */
+data class KeyboardColors(
+    val base: Color,
+    val key: Color,
+    val functionKey: Color,
+    val accent: Color,
+    val onAccent: Color,
+    val pressed: Color,
+    val suggestionBar: Color,
+    val keyText: Color,
+    val mutedText: Color,
+)
+
+private val DarkKeyboardColors = KeyboardColors(
+    base = KeyBaseDark,
+    key = KeyFaceDark,
+    functionKey = KeyFunctionDark,
+    accent = KeyAccentDark,
+    onAccent = OnKeyAccentDark,
+    pressed = KeyPressedDark,
+    suggestionBar = KeyBarDark,
+    keyText = KeyTextDark,
+    mutedText = KeyMutedDark,
+)
+
+private val LightKeyboardColors = KeyboardColors(
+    base = KeyBaseLight,
+    key = KeyFaceLight,
+    functionKey = KeyFunctionLight,
+    accent = KeyAccentLight,
+    onAccent = OnKeyAccentLight,
+    pressed = KeyPressedLight,
+    suggestionBar = KeyBarLight,
+    keyText = KeyTextLight,
+    mutedText = KeyMutedLight,
+)
+
+val LocalKeyboardColors = staticCompositionLocalOf { DarkKeyboardColors }
+
 private val DarkScheme = darkColorScheme(
     primary = TerminalGreen,
     onPrimary = Color(0xFF08210F),
@@ -115,6 +160,7 @@ fun DeathCodeTheme(
 
     CompositionLocalProvider(
         LocalCodeColors provides if (darkTheme) DarkCodeColors else LightCodeColors,
+        LocalKeyboardColors provides if (darkTheme) DarkKeyboardColors else LightKeyboardColors,
     ) {
         MaterialTheme(
             colorScheme = if (darkTheme) DarkScheme else LightScheme,

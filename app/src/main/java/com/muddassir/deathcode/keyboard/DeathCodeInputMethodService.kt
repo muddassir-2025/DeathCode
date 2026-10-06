@@ -1,9 +1,12 @@
 package com.muddassir.deathcode.keyboard
 
+import android.content.Context
 import android.content.Intent
 import android.inputmethodservice.InputMethodService
 import android.view.KeyEvent
 import android.view.View
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.platform.ComposeView
@@ -79,9 +82,6 @@ class DeathCodeInputMethodService :
         }
 
         val composeView = ComposeView(this).apply {
-            setViewTreeLifecycleOwner(this@DeathCodeInputMethodService)
-            setViewTreeViewModelStoreOwner(this@DeathCodeInputMethodService)
-            setViewTreeSavedStateRegistryOwner(this@DeathCodeInputMethodService)
             setContent {
                 val theme by themeMode
                 DeathCodeTheme(themeMode = theme) {
@@ -97,7 +97,43 @@ class DeathCodeInputMethodService :
 
         lifecycleRegistry.currentState = Lifecycle.State.RESUMED
         controller.onEditorChanged()
-        return composeView
+
+        return KeyboardInputRoot(this).apply {
+            addView(
+                composeView,
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ),
+            )
+        }
+    }
+
+    /**
+     * Root view of the keyboard window.
+     *
+     * An input method is a [android.app.Dialog]-backed window, not an Activity, so its window
+     * has no `android.R.id.content` parent. Compose therefore resolves the [LifecycleOwner] for
+     * its window recomposer from the *top-most* view of the window hierarchy (Compose UI's
+     * `View.contentChild`), and looks it up by walking **up** from there. Owners registered only
+     * on the `ComposeView` are therefore invisible to that lookup, and composition throws
+     * "ViewTreeLifecycleOwner not found from …".
+     *
+     * [onAttachedToWindow] runs before the Compose content attaches, so it climbs to the window
+     * root and registers all three owners on both the root and this view.
+     */
+    private inner class KeyboardInputRoot(context: Context) : FrameLayout(context) {
+        override fun onAttachedToWindow() {
+            val owners = this@DeathCodeInputMethodService
+            var root: View = this
+            while (root.parent is View) root = root.parent as View
+            for (view in arrayOf<View>(this, root)) {
+                view.setViewTreeLifecycleOwner(owners)
+                view.setViewTreeViewModelStoreOwner(owners)
+                view.setViewTreeSavedStateRegistryOwner(owners)
+            }
+            super.onAttachedToWindow()
+        }
     }
 
     override fun onStartInputView(info: android.view.inputmethod.EditorInfo?, restarting: Boolean) {
